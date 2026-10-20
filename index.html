@@ -174,12 +174,47 @@ function toast(msg){ toastEl.textContent=msg; toastEl.classList.add("on"); clear
 /* ========= Save / Reset ========= */
 const pad = n => String(n).padStart(2,"0");
 const fmt = d => `${pad(d.getDate())}-${pad(d.getMonth()+1)}-${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
-document.getElementById("btnSave").onclick = () => {
+/* ---- Rekap gambar -> galeri (hanya di versi APK) ---- */
+function recapPNG(rec){
+  const c=document.createElement("canvas"); c.width=1280; c.height=720;
+  const x=c.getContext("2d");
+  x.fillStyle="#000"; x.fillRect(0,0,1280,720);
+  x.fillStyle="#fff"; x.font="600 34px sans-serif"; x.textBaseline="middle";
+  x.fillText("Traffic Counter",24,40); x.textAlign="right"; x.font="30px sans-serif";
+  x.fillText(rec.t,1256,40); x.textAlign="left";
+  const cols=[["moto","Motor","#66ab5f","#fff"],["truck","Truk","#2139c0","#fff"],["minibus","Bus kecil","#f08a1c","#fff"],["bus","Bus","#e8ea00","#000"],["car","Mobil (x"+rec.factor+")","#961f2a","#fff"]];
+  ["A","B"].forEach((s,i)=>{
+    const x0=20+i*630;
+    x.fillStyle="#fff"; x.font="600 30px sans-serif"; x.fillText("Arah "+s,x0,98);
+    let tot=0;
+    cols.forEach((k,j)=>{
+      const y=122+j*100, v=rec[s][k[0]]; tot+=v;
+      x.fillStyle=k[2]; x.fillRect(x0,y,610,90);
+      x.fillStyle=k[3]; x.font="34px sans-serif"; x.textAlign="left"; x.fillText(k[1],x0+22,y+45);
+      x.font="600 56px sans-serif"; x.textAlign="right"; x.fillText(String(v),x0+590,y+47);
+    });
+    x.textAlign="left"; x.fillStyle="#fff"; x.font="600 30px sans-serif";
+    x.fillText("Total arah "+s+": "+tot,x0,654);
+  });
+  return c.toDataURL("image/png").split(",")[1];
+}
+function nativeSaver(){
+  try{ if(window.Capacitor && Capacitor.isNativePlatform && Capacitor.isNativePlatform()) return Capacitor.registerPlugin("GallerySaver"); }catch(e){}
+  return null;
+}
+document.getElementById("btnSave").onclick = async () => {
   const total = ["A","B"].reduce((a,s)=>a+Object.values(S[s]).reduce((x,y)=>x+y,0),0);
   if(total===0){ toast("Belum ada hitungan"); return; }
-  S.log.push({t:fmt(new Date()), factor:S.factor, A:{...S.A}, B:{...S.B}});
-  S.A = zero(); S.B = zero();
-  persist(); render(); toast(`Tersimpan (#${S.log.length}). Lanjut interval berikutnya.`);
+  const rec = {t:fmt(new Date()), factor:S.factor, A:{...S.A}, B:{...S.B}};
+  S.log.push(rec); S.A = zero(); S.B = zero();
+  persist(); render();
+  const g = nativeSaver();
+  if(g){
+    try{
+      await g.save({data:recapPNG(rec), name:"traffic-"+rec.t.replace(/[: ]/g,"-")+".png"});
+      toast(`Tersimpan #${S.log.length} + masuk galeri`);
+    }catch(e){ toast(`Tersimpan #${S.log.length} (gagal simpan ke galeri)`); }
+  } else toast(`Tersimpan (#${S.log.length}). Lanjut interval berikutnya.`);
 };
 document.getElementById("btnReset").onclick = () => {
   if(confirm("Reset semua hitungan interval ini ke 0?")){ S.A=zero(); S.B=zero(); persist(); render(); toast("Direset"); }
