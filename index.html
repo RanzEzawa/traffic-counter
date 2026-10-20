@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<title>Traffic Counter</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#000000">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon.svg">
+<style>
+:root{
+  --moto:#66ab5f; --truck:#2139c0; --minibus:#f08a1c; --bus:#e8ea00; --car:#961f2a;
+  --bar:#f2f2f2; --line:#000;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none;touch-action:manipulation}
+html,body{margin:0;height:100%;background:#000;font-family:"Segoe UI",Roboto,Arial,sans-serif;overflow:hidden}
+#app{height:100dvh;display:grid;grid-template-rows:10% 38% 1fr;gap:4px;background:var(--line)}
+.bar{display:grid;grid-template-columns:1fr 1fr 9%;gap:4px}
+.bar button{border:0;background:var(--bar);font-size:clamp(18px,4.2vh,36px);color:#555;cursor:pointer;font-family:inherit;letter-spacing:.02em}
+.bar button:active{background:#d6d6d6}
+#btnMenu{font-weight:800;color:#000}
+.row{display:grid;grid-template-columns:1fr 1fr;gap:4px}
+.side{display:grid;gap:0;min-width:0}
+.side.s4{grid-template-columns:repeat(4,1fr)}
+.tile{position:relative;display:flex;flex-direction:column;align-items:center;justify-content:space-between;
+  padding:2.5vh 0 1.5vh;color:#fff;cursor:pointer;overflow:hidden;min-width:0}
+.tile:active{filter:brightness(1.18)}
+.tile svg{height:44%;max-width:86%;flex:none}
+.mirror svg{transform:scaleX(-1)}
+.tile .n{font-size:clamp(28px,9vh,80px);line-height:1;font-weight:500;text-shadow:0 2px 0 rgba(0,0,0,.25)}
+.tile .l{position:absolute;top:2px;left:0;right:0;text-align:center;font-size:clamp(9px,1.8vh,14px);opacity:.75}
+.moto{background:var(--moto)} .truck{background:var(--truck)} .minibus{background:var(--minibus)} .bus{background:var(--bus)} .car{background:var(--car)}
+.cars{display:grid;grid-template-columns:1fr 20% 1fr;gap:4px}
+.car{position:relative;display:flex;flex-direction:column;align-items:center;justify-content:space-between;padding:3vh 0 1vh;color:#fff;cursor:pointer}
+.car:active{filter:brightness(1.18)}
+.car svg{width:78%;max-height:60%}
+.car .n{font-size:clamp(36px,12vh,110px);line-height:1;font-weight:500}
+.car .stamp{position:absolute;bottom:6px;font-size:clamp(12px,3.2vh,26px);opacity:.95}
+#batt{left:4%} #clock{right:3%}
+.factor{background:var(--bar);display:grid;grid-template-rows:1fr 1fr 1fr}
+.factor button{border:0;background:transparent;font-size:clamp(28px,8vh,64px);color:#333;cursor:pointer}
+.factor button:active{background:#d6d6d6}
+.factor .mid{display:flex;flex-direction:column;align-items:center;justify-content:center;border-top:1px solid #ddd;border-bottom:1px solid #ddd}
+.factor .mid small{font-size:clamp(11px,2.6vh,20px);color:#666}
+.factor .mid b{font-size:clamp(30px,9vh,72px);color:#444;line-height:1}
+dialog{border:0;border-radius:10px;padding:18px;max-width:420px;width:88vw;font-size:16px}
+dialog::backdrop{background:rgba(0,0,0,.6)}
+dialog h3{margin:0 0 4px} dialog p{margin:0 0 12px;color:#555;font-size:14px}
+dialog button{display:block;width:100%;padding:13px;margin:6px 0;font-size:16px;border:1px solid #bbb;background:#f6f6f6;border-radius:8px;cursor:pointer;font-family:inherit}
+dialog button.danger{color:#a00}
+#toast{position:fixed;left:50%;top:12%;transform:translateX(-50%);background:#000c;color:#fff;padding:10px 18px;border-radius:20px;font-size:16px;opacity:0;pointer-events:none;transition:opacity .2s;z-index:9}
+#toast.on{opacity:1}
+#rotate{display:none;position:fixed;inset:0;background:#000;color:#fff;z-index:20;align-items:center;justify-content:center;text-align:center;font-size:22px;padding:30px}
+@media (orientation:portrait) and (max-width:700px){#rotate{display:flex}}
+</style>
+</head>
+<body>
+<div id="rotate">Putar HP ke mode landscape<br>(layar mendatar) untuk memakai aplikasi ini.</div>
+<div id="toast"></div>
+<div id="app">
+  <div class="bar">
+    <button id="btnSave">Save and Next</button>
+    <button id="btnReset">Reset</button>
+    <button id="btnMenu" aria-label="Menu">X</button>
+  </div>
+  <div class="row" id="vehRow"></div>
+  <div class="cars">
+    <div class="car" id="carA"><span id="batt" class="stamp"></span><div></div><div class="n" id="nA">0</div></div>
+    <div class="factor">
+      <button id="fUp" aria-label="Naikkan car factor">&#8593;</button>
+      <div class="mid"><small>car factor:</small><b id="fVal">1</b></div>
+      <button id="fDown" aria-label="Turunkan car factor">&#8595;</button>
+    </div>
+    <div class="car" id="carB"><div></div><div class="n" id="nB">0</div><span id="clock" class="stamp"></span></div>
+  </div>
+</div>
+
+<dialog id="dlg">
+  <h3>Menu</h3>
+  <p id="dlgInfo"></p>
+  <button id="mExport">Unduh data (CSV)</button>
+  <button id="mFull">Layar penuh</button>
+  <button id="mClearLog" class="danger">Hapus semua data tersimpan</button>
+  <button id="mClose">Tutup</button>
+</dialog>
+
+<script>
+"use strict";
+/* ========= Konfigurasi ========= */
+const TYPES = ["moto","truck","minibus","bus"];           // urutan di sisi A (kiri -> tengah)
+const LABEL = {moto:"Motor",truck:"Truk",minibus:"Bus kecil",bus:"Bus",car:"Mobil"};
+const KEY = "trafficCounter.v1";
+
+/* ========= Ikon (SVG putih) ========= */
+const W = 'fill="#fff" stroke="#fff"';
+const ICON = {
+ moto:`<svg viewBox="0 0 100 64"><circle cx="21" cy="46" r="11" fill="none" stroke="#fff" stroke-width="6"/><circle cx="80" cy="46" r="11" fill="none" stroke="#fff" stroke-width="6"/><path d="M21 46L38 26H58L50 14H36M58 26L80 46M42 26L52 46H66" fill="none" stroke="#fff" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/><path d="M34 22H62L56 32H38Z" ${W} stroke-width="2"/></svg>`,
+ truck:`<svg viewBox="0 0 110 64"><rect x="4" y="8" width="64" height="38" rx="3" ${W}/><path d="M72 18H92L104 32V46H72Z" ${W} stroke-linejoin="round"/><rect x="80" y="23" width="12" height="9" fill="currentColor"/><rect x="2" y="46" width="104" height="5" ${W}/><circle cx="26" cy="52" r="9" ${W} stroke="currentColor" stroke-width="3"/><circle cx="84" cy="52" r="9" ${W} stroke="currentColor" stroke-width="3"/></svg>`,
+ minibus:`<svg viewBox="0 0 100 64"><path d="M6 46V24Q6 12 18 12H70Q80 12 86 22L96 36V46Z" ${W} stroke-linejoin="round"/><rect x="14" y="19" width="14" height="12" fill="currentColor"/><rect x="32" y="19" width="14" height="12" fill="currentColor"/><rect x="50" y="19" width="14" height="12" fill="currentColor"/><path d="M69 19H77Q81 19 83 23L88 31H69Z" fill="currentColor"/><circle cx="26" cy="48" r="9" ${W} stroke="currentColor" stroke-width="3"/><circle cx="74" cy="48" r="9" ${W} stroke="currentColor" stroke-width="3"/></svg>`,
+ bus:`<svg viewBox="0 0 130 64"><rect x="4" y="8" width="122" height="42" rx="5" ${W}/><g fill="currentColor"><rect x="12" y="15" width="14" height="14"/><rect x="30" y="15" width="14" height="14"/><rect x="48" y="15" width="14" height="14"/><rect x="66" y="15" width="14" height="14"/><rect x="84" y="15" width="14" height="14"/><rect x="102" y="15" width="16" height="14"/></g><circle cx="26" cy="52" r="9" ${W} stroke="currentColor" stroke-width="3"/><circle cx="102" cy="52" r="9" ${W} stroke="currentColor" stroke-width="3"/></svg>`,
+ car:`<svg viewBox="0 0 220 100"><path d="M14 66Q14 52 34 48L62 26H118L146 46H176Q196 48 198 62V76H14Z" fill="#fff" stroke="#000" stroke-width="3" stroke-linejoin="round"/><path d="M70 32H94V46H56Z M100 32H116L136 46H100Z" fill="#961f2a" stroke="#000" stroke-width="2"/><circle cx="56" cy="78" r="17" fill="#fff" stroke="#000" stroke-width="3"/><circle cx="56" cy="78" r="3" fill="#000"/><circle cx="160" cy="78" r="17" fill="#fff" stroke="#000" stroke-width="3"/><circle cx="160" cy="78" r="3" fill="#000"/><g fill="#fff" stroke="#000" stroke-width="2"><circle cx="206" cy="62" r="6"/><circle cx="212" cy="52" r="7"/></g></svg>`
+};
+
+/* ========= State ========= */
+const zero = () => ({moto:0,truck:0,minibus:0,bus:0,car:0});
+let S = load();
+function load(){
+  try{ const s = JSON.parse(localStorage.getItem(KEY)); if(s && s.A && s.B) return s; }catch(e){}
+  return {A:zero(), B:zero(), factor:1, log:[]};
+}
+function persist(){ try{ localStorage.setItem(KEY, JSON.stringify(S)); }catch(e){} }
+
+/* ========= UI ========= */
+const row = document.getElementById("vehRow");
+function sideHTML(side){
+  const order = side==="A" ? TYPES : [...TYPES].reverse();
+  return `<div class="side s4 ${side==="B"?"mirror":""}">` + order.map(t =>
+    `<div class="tile ${t}" data-side="${side}" data-type="${t}">
+       <span class="l">${LABEL[t]}</span>${ICON[t]}<div class="n" id="n${side}${t}">0</div></div>`).join("") + `</div>`;
+}
+row.innerHTML = sideHTML("A") + sideHTML("B");
+document.getElementById("carA").insertAdjacentHTML("afterbegin", "");
+document.querySelector("#carA > div").outerHTML = ICON.car;
+const bSvg = ICON.car;
+document.querySelector("#carB > div").outerHTML = bSvg;
+document.querySelector("#carB svg").style.transform = "scaleX(-1)";
+document.querySelectorAll(".car svg").forEach(s => s.setAttribute("preserveAspectRatio","xMidYMid meet"));
+
+function render(){
+  for(const side of ["A","B"]){
+    for(const t of TYPES) document.getElementById("n"+side+t).textContent = S[side][t];
+    document.getElementById("n"+side).textContent = S[side].car;
+  }
+  document.getElementById("fVal").textContent = S.factor;
+}
+render();
+
+/* ========= Tap = +1, tahan lama = -1 ========= */
+function bump(side,type,delta){
+  const v = S[side][type] + delta;
+  if(v < 0) return;
+  S[side][type] = Math.round(v*100)/100;
+  persist(); render();
+  if(navigator.vibrate) navigator.vibrate(delta>0?12:[10,40,10]);
+}
+function bind(el, side, type){
+  let timer=null, long=false;
+  el.addEventListener("pointerdown", e => {
+    long=false;
+    timer=setTimeout(()=>{ long=true; bump(side,type,type==="car"?-S.factor:-1); }, 650);
+  });
+  const end = e => {
+    if(timer){ clearTimeout(timer); timer=null; if(!long && e.type==="pointerup") bump(side,type,type==="car"?S.factor:1); }
+  };
+  el.addEventListener("pointerup", end);
+  el.addEventListener("pointerleave", end);
+  el.addEventListener("pointercancel", end);
+  el.addEventListener("contextmenu", e => e.preventDefault());
+}
+document.querySelectorAll(".tile").forEach(el => bind(el, el.dataset.side, el.dataset.type));
+bind(document.getElementById("carA"),"A","car");
+bind(document.getElementById("carB"),"B","car");
+
+/* ========= Car factor ========= */
+document.getElementById("fUp").onclick   = () => { S.factor = Math.min(20, S.factor+1); persist(); render(); };
+document.getElementById("fDown").onclick = () => { S.factor = Math.max(1,  S.factor-1); persist(); render(); };
+
+/* ========= Toast ========= */
+const toastEl = document.getElementById("toast"); let tt;
+function toast(msg){ toastEl.textContent=msg; toastEl.classList.add("on"); clearTimeout(tt); tt=setTimeout(()=>toastEl.classList.remove("on"),1600); }
+
+/* ========= Save / Reset ========= */
+const pad = n => String(n).padStart(2,"0");
+const fmt = d => `${pad(d.getDate())}-${pad(d.getMonth()+1)}-${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+document.getElementById("btnSave").onclick = () => {
+  const total = ["A","B"].reduce((a,s)=>a+Object.values(S[s]).reduce((x,y)=>x+y,0),0);
+  if(total===0){ toast("Belum ada hitungan"); return; }
+  S.log.push({t:fmt(new Date()), factor:S.factor, A:{...S.A}, B:{...S.B}});
+  S.A = zero(); S.B = zero();
+  persist(); render(); toast(`Tersimpan (#${S.log.length}). Lanjut interval berikutnya.`);
+};
+document.getElementById("btnReset").onclick = () => {
+  if(confirm("Reset semua hitungan interval ini ke 0?")){ S.A=zero(); S.B=zero(); persist(); render(); toast("Direset"); }
+};
+
+/* ========= Menu (X) ========= */
+const dlg = document.getElementById("dlg");
+document.getElementById("btnMenu").onclick = () => {
+  document.getElementById("dlgInfo").textContent = `${S.log.length} interval tersimpan di perangkat ini.`;
+  dlg.showModal();
+};
+document.getElementById("mClose").onclick = () => dlg.close();
+document.getElementById("mFull").onclick = () => { (document.documentElement.requestFullscreen||(()=>{})).call(document.documentElement); dlg.close(); };
+document.getElementById("mClearLog").onclick = () => {
+  if(confirm("Hapus SEMUA data tersimpan? Tidak bisa dibatalkan.")){ S.log=[]; persist(); dlg.close(); toast("Data dihapus"); }
+};
+document.getElementById("mExport").onclick = () => {
+  if(!S.log.length){ toast("Belum ada data tersimpan"); return; }
+  const head = ["waktu","arah","motor","truk","bus_kecil","bus","mobil","car_factor"];
+  const lines = [head.join(",")];
+  S.log.forEach(r => ["A","B"].forEach(s => lines.push([r.t,s,r[s].moto,r[s].truck,r[s].minibus,r[s].bus,r[s].car,r.factor].join(","))));
+  const blob = new Blob(["\ufeff"+lines.join("\n")], {type:"text/csv"});
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "traffic-counter-" + fmt(new Date()).replace(/[: ]/g,"-") + ".csv";
+  document.body.appendChild(a); a.click(); a.remove();
+  dlg.close();
+};
+
+/* ========= Jam & baterai ========= */
+const clock = document.getElementById("clock");
+setInterval(()=>clock.textContent = fmt(new Date()), 1000); clock.textContent = fmt(new Date());
+if(navigator.getBattery){
+  navigator.getBattery().then(b=>{
+    const u=()=>document.getElementById("batt").textContent = Math.round(b.level*100)+" %";
+    u(); b.addEventListener("levelchange",u);
+  });
+}
+
+/* ========= Cegah layar mati & mode offline ========= */
+let wl=null;
+async function lock(){ try{ if("wakeLock" in navigator) wl = await navigator.wakeLock.request("screen"); }catch(e){} }
+document.addEventListener("visibilitychange", ()=>{ if(document.visibilityState==="visible") lock(); });
+document.addEventListener("pointerdown", lock, {once:true});
+if("serviceWorker" in navigator && location.protocol.startsWith("http")) navigator.serviceWorker.register("sw.js").catch(()=>{});
+</script>
+</body>
+</html>
