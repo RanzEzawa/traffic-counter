@@ -1,0 +1,52 @@
+name: Build APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Siapkan isi web
+        run: |
+          mkdir -p www
+          cp index.html manifest.webmanifest icon.svg www/
+
+      - name: Buat proyek Android
+        run: npx cap add android
+
+      - name: Pasang kode native + pengaturan
+        run: |
+          PKG=android/app/src/main/java/com/ranzezawa/trafficcounter
+          mkdir -p "$PKG"
+          cp native/*.java "$PKG/"
+          sed -i 's/minSdkVersion = [0-9]*/minSdkVersion = 29/' android/variables.gradle
+          sed -i '0,/<activity/s//<activity android:screenOrientation="sensorLandscape"/' android/app/src/main/AndroidManifest.xml
+          npx cap sync android
+
+      - name: Build APK
+        working-directory: android
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleDebug
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: traffic-counter-apk
+          path: android/app/build/outputs/apk/debug/app-debug.apk
