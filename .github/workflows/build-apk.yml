@@ -5,6 +5,9 @@ on:
   push:
     branches: [main]
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -46,7 +49,11 @@ jobs:
           chmod +x gradlew
           ./gradlew assembleDebug
 
-      - uses: actions/upload-artifact@v4
-        with:
-          name: traffic-counter-apk
-          path: android/app/build/outputs/apk/debug/app-debug.apk
+      - name: Publish ke Releases
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cp android/app/build/outputs/apk/debug/app-debug.apk traffic-counter.apk
+          gh release create "v${{ github.run_number }}" traffic-counter.apk \
+            --title "Traffic Counter v${{ github.run_number }}" \
+            --notes "APK Android (butuh Android 10+). Unduh file traffic-counter.apk lalu pasang."
