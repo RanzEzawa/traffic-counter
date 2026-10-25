@@ -1,0 +1,60 @@
+name: Build IPA
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Siapkan isi web
+        run: |
+          mkdir -p www
+          cp index.html manifest.webmanifest icon.svg www/
+
+      - name: Buat proyek iOS
+        run: npx cap add ios
+
+      - name: Pasang kode native + pengaturan
+        run: |
+          cp native-ios/AppDelegate.swift ios/App/App/AppDelegate.swift
+          sed -i '' 's/customClass="CAPBridgeViewController"/customClass="MyViewController"/; s/customModule="Capacitor"/customModule="App"/' ios/App/App/Base.lproj/Main.storyboard
+          /usr/libexec/PlistBuddy -c "Add :NSPhotoLibraryAddUsageDescription string Simpan gambar rekap hitungan ke Foto" ios/App/App/Info.plist
+          npx cap sync ios
+
+      - name: Build (tanpa tanda tangan)
+        run: |
+          xcodebuild -workspace ios/App/App.xcworkspace -scheme App \
+            -configuration Release -sdk iphoneos -derivedDataPath build \
+            IPHONEOS_DEPLOYMENT_TARGET=14.0 \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" build
+
+      - name: Bungkus jadi .ipa
+        run: |
+          mkdir Payload
+          cp -r build/Build/Products/Release-iphoneos/App.app Payload/
+          zip -qr traffic-counter.ipa Payload
+
+      - name: Publish ke Releases
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete ios-latest --cleanup-tag -y || true
+          gh release create ios-latest traffic-counter.ipa \
+            --target "${{ github.sha }}" --latest=false \
+            --title "Traffic Counter iPhone (.ipa)" \
+            --notes "File .ipa belum bertanda tangan. Pasang lewat Sideloadly."
